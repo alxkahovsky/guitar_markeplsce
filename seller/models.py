@@ -5,8 +5,6 @@ from django.conf import settings
 from mptt.models import MPTTModel, TreeForeignKey, TreeManyToManyField
 from category_tree.models import ProductCategory
 
-# from django.contrib.postgres.fields import JSONField
-
 
 class Seller(models.Model):
     name = models.CharField(max_length=50, verbose_name='Наименование')
@@ -39,6 +37,10 @@ class Seller(models.Model):
     created = models.DateField(blank=True, null=True, default=timezone.now, verbose_name='Дата создания записи')
     updated = models.DateField(blank=True, null=True, auto_now=True, verbose_name='Дата ред-ия записи')
 
+    class Meta:
+        verbose_name = 'Магазин'
+        verbose_name_plural = 'Магазины'
+
     def __str__(self):
         return '%s' % self.name
 
@@ -46,10 +48,10 @@ class Seller(models.Model):
 class Product(models.Model):
     shop = models.ForeignKey(Seller, default=None, null=True, on_delete=models.CASCADE, verbose_name='Продавец',
                              related_name='product_list', help_text='Заполняется автоматически')
-    category = TreeManyToManyField(ProductCategory, blank=True, symmetrical=False, related_name='products',
+    category = TreeManyToManyField(ProductCategory, blank=False, symmetrical=False, related_name='products',
                                    verbose_name='Категория->Подкатегория')
-    name = models.CharField(max_length=50, verbose_name='Наименование')
-    slug = models.SlugField(unique=True, verbose_name='Уникальная строка')
+    name = models.CharField(max_length=50, verbose_name='Наименование', help_text='Можете использовать любое слово')
+    slug = models.SlugField(unique=True, verbose_name='Уникальная строка', help_text='Заполняется автоматически')
     brand = models.CharField(max_length=50, verbose_name='Бренд/Производитель')
     model = models.CharField(max_length=50, verbose_name='Модель')
     code = models.CharField(max_length=16, db_index=True, unique=True, default=None, verbose_name='Код товара',
@@ -59,8 +61,12 @@ class Product(models.Model):
     attributes = models.JSONField(blank=True, null=True, verbose_name='Атрибуты', help_text='используйте JSON-формат')
     available = models.BooleanField(default=True, verbose_name='Доступен к покупке')
 
+    class Meta:
+        verbose_name = 'Товар'
+        verbose_name_plural = 'Товары'
 
-
+    def __str__(self):
+        return '%s' % self.name
 
 
 class ProductPhotos(models.Model):
@@ -71,3 +77,7 @@ class ProductPhotos(models.Model):
     is_main = models.BooleanField(default=False, verbose_name='Основная фотография')
     created = models.DateField(blank=True, null=True, default=timezone.now, verbose_name='Дата создания записи')
     updated = models.DateField(blank=True, null=True, default=timezone.now, verbose_name='Дата ред-ия записи')
+
+    class Meta:
+        verbose_name = 'Фотография'
+        verbose_name_plural = 'Фотографии'

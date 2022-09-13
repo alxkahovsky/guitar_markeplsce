@@ -23,5 +23,24 @@ class ProductCategory(MPTTModel):
         verbose_name = 'Категория -> Подкатегория'
         verbose_name_plural = 'Категории -> Подкатегории'
 
+    # def __str__(self):
+    #     return '%s' % self.name
+
     def __str__(self):
-        return '%s' % self.name
+        try:
+            ancestors = self.get_ancestors(include_self=True)
+            ancestors = [i.name for i in ancestors]
+        except Exception as e:
+            print(e)
+            ancestors = [self.name]
+        return ' >>> '.join(ancestors[:len(ancestors) + 1])
+
+    def tested(self):
+        try:
+            ancestors = self.get_ancestors(include_self=True)
+            ancestors = [i.name for i in ancestors]
+        except Exception as e:
+            print(e)
+            ancestors = [self.name]
+        print(ancestors)
+        return ancestors[-1]
