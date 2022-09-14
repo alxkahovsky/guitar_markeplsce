@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'mptt',
     "category_tree.apps.CategoryTreeConfig",
     'seller.apps.SellerConfig',
+    'import_export',
 ]
 
 MIDDLEWARE = [
