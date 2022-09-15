@@ -3,7 +3,7 @@ from .models import Product, ProductPhotos, Seller
 from django.shortcuts import render, get_object_or_404, redirect
 from django.core.exceptions import ValidationError
 from django import forms
-from django.forms import SelectMultiple
+from django.forms import SelectMultiple, CheckboxSelectMultiple
 from mptt.admin import MPTTModelAdmin
 from mptt.models import TreeManyToManyField
 from category_tree.models import ProductCategory
@@ -22,7 +22,8 @@ from django.views.decorators.http import require_POST
 from django.urls import path, reverse
 from django.http import HttpResponse, HttpResponseRedirect
 import tablib
-
+from transliterate import translit
+from transliterate.utils import LanguageDetectionError
 
 
 class ProductPhotoInline(admin.TabularInline):
@@ -59,29 +60,32 @@ class CategoryFilter(SimpleListFilter):
             return queryset.filter(category__name=self.value())
 
 
-
 class ProductResource(resources.ModelResource):
-    category = fields.Field(column_name='Категория',
+    category = fields.Field(column_name='category',
                             attribute='category',
-                            widget=ManyToManyWidget(ProductCategory, field='name'))
+                            widget=ForeignKeyWidget(ProductCategory, field='name'))
     # shop = fields.Field(column_name='Магазин', attribute='shop', widget=ForeignKeyWidget(Seller, field='name'))
 
     class Meta:
         model = Product
-        fields = ['id', 'shop', 'category', 'name', 'slug', 'brand', 'model', 'code', 'price', 'attributes', 'available']
-        export_order = ['id', 'shop', 'category', 'name', 'slug', 'brand', 'model', 'code', 'price', 'attributes', 'available']
+        fields = ['id', 'shop', 'category', 'name', 'slug', 'brand',
+                  'model', 'code', 'price', 'attributes', 'available']
+        export_order = ['id', 'shop', 'category', 'name', 'slug', 'brand',
+                        'model', 'code', 'price', 'attributes', 'available']
 
 
-# class CustomImportForm(ImportForm):
-#     shop = forms.ModelChoiceField(
-#         queryset=Seller.objects.all(),
-#         required=True)
-#
-#
-# class CustomConfirmImportForm(ConfirmImportForm):
-#     shop = forms.ModelChoiceField(
-#         queryset=Seller.objects.all(),
-#         required=True)
+class CustomImportForm(ImportForm):
+    category = forms.ModelMultipleChoiceField(
+        queryset=ProductCategory.objects.filter(children=None),
+        required=True, widget=SelectMultiple)
+
+
+
+class CustomConfirmImportForm(ConfirmImportForm):
+    category = forms.ModelMultipleChoiceField(
+        queryset=ProductCategory.objects.filter(children=None),
+        required=True, widget=SelectMultiple)
+
 
 
 class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
@@ -89,31 +93,54 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
     form = EndCategories
     formfield_overrides = {TreeManyToManyField: {'widget': SelectMultiple}}
 
-    # def get_import_form(self):
-    #     return CustomImportForm
-    #
-    # def get_confirm_import_form(self):
-    #     return CustomConfirmImportForm
-    #
-    # def get_form_kwargs(self, form, *args, **kwargs):
-    #     # pass on `author` to the kwargs for the custom confirm form
-    #     if isinstance(form, CustomImportForm):
-    #         if form.is_valid():
-    #             shop = form.cleaned_data['shop']
-    #
-    #             kwargs.update({'shop': shop.id})
-    #
-    #     return kwargs
-    #
-    # def get_import_data_kwargs(self, request, *args, **kwargs):
-    #     """
-    #     Prepare kwargs for import_data.
-    #     """
-    #     form = kwargs.get('form')
-    #     if form:
-    #         kwargs.pop('form')
-    #         return kwargs
-    #     return {}
+    def get_import_form(self):
+        return CustomImportForm
+
+    def get_confirm_import_form(self):
+        return CustomConfirmImportForm
+
+    def get_form_kwargs(self, form, *args, **kwargs):
+        # pass on `author` to the kwargs for the custom confirm form
+        if isinstance(form, CustomImportForm):
+            if form.is_valid():
+                category = form.cleaned_data['category']
+                kwargs.update({'category': str(category.last().name)})
+        return kwargs
+
+    def _change_dataset(self, request, dataset):
+        """Автозаполнение id, slug, shop полей"""
+        user_dataset = tablib.Dataset()
+        headers = dataset.headers
+        headers[10] = 'shop'
+        user_dataset.headers = headers
+        shop = get_object_or_404(Seller, user=request.user)
+        seller_products = Product.objects.filter(shop=shop)
+        id = 1
+        for row in dataset:
+            row = list(row)
+            row[10] = shop.id
+            if row[0] not in [sp.id for sp in seller_products]:
+                id += 1
+                while len(Product.objects.filter(id=id)) > 0:
+                    id += 1
+                row[0] = id
+            if row[3] is None:
+                slug_dict = {
+                    'name': str(row[2]),
+                    'brand': str(row[4]),
+                    'model': str(row[5]),
+                    'id': str(row[0])
+                }
+                for key, value in slug_dict.items():
+                    try:
+                        str_translation = translit(value, reversed=True).replace(' ', '-')
+                        slug_dict[key] = str_translation.lower()
+                    except LanguageDetectionError:
+                        slug_dict[key] = value.lower()
+                        continue
+                row[3] = f'{slug_dict["name"]}-{slug_dict["brand"]}-{slug_dict["model"]}-{slug_dict["id"]}'
+            user_dataset.append(row)
+        return user_dataset
 
     @method_decorator(require_POST)
     def process_import(self, request, *args, **kwargs):
@@ -134,20 +161,96 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
             data = tmp_storage.read(input_format.get_read_mode())
             if not input_format.is_binary() and self.from_encoding:
                 data = force_str(data, self.from_encoding)
-            dataset = input_format.create_dataset(data)
-            user_dataset = tablib.Dataset()
-            headers = dataset.headers
-            headers[10] = 'shop'
-            user_dataset.headers = headers
-            shop = get_object_or_404(Seller, user=request.user)
-            for row in dataset:
-                row = list(row)
-                row[10] = shop.id
-                user_dataset.append(row)
-            result = self.process_dataset(user_dataset, confirm_form, request, *args, **kwargs)
+            #  используем кастомный метод change_dataset в котором вносим нужные нам изменения
+            dataset = self._change_dataset(request, input_format.create_dataset(data))
+            result = self.process_dataset(dataset, confirm_form, request, *args, **kwargs)
             tmp_storage.remove()
 
             return self.process_result(result, request)
+
+    def import_action(self, request, *args, **kwargs):
+        """
+        Perform a dry_run of the import to make sure the import will not
+        result in errors.  If there where no error, save the user
+        uploaded file to a local temp file that will be used by
+        'process_import' for the actual import.
+        """
+        if not self.has_import_permission(request):
+            raise PermissionDenied
+
+        context = self.get_import_context_data()
+
+        import_formats = self.get_import_formats()
+        form_type = self.get_import_form()
+        form_kwargs = self.get_form_kwargs(form_type, *args, **kwargs)
+        print('1')
+        form = form_type(import_formats,
+                         request.POST or None,
+                         request.FILES or None,
+                         **form_kwargs)
+
+        if request.POST and form.is_valid():
+            print(form.cleaned_data)
+            input_format = import_formats[
+                int(form.cleaned_data['input_format'])
+            ]()
+            import_file = form.cleaned_data['import_file']
+            # first always write the uploaded file to disk as it may be a
+            # memory file or else based on settings upload handlers
+            tmp_storage = self.write_to_tmp_storage(import_file, input_format)
+
+            # then read the file, using the proper format-specific mode
+            # warning, big files may exceed memory
+            try:
+                data = tmp_storage.read(input_format.get_read_mode())
+                if not input_format.is_binary() and self.from_encoding:
+                    data = force_str(data, self.from_encoding)
+                #  используем кастомный метод change_dataset в котором вносим нужные нам изменения
+                dataset = self._change_dataset(request, input_format.create_dataset(data))
+
+            except UnicodeDecodeError as e:
+                return HttpResponse(_(u"<h1>Imported file has a wrong encoding: %s</h1>" % e))
+            except Exception as e:
+                return HttpResponse(_(u"<h1>%s encountered while trying to read file: %s</h1>" % (
+                type(e).__name__, import_file.name)))
+
+            # prepare kwargs for import data, if needed
+            res_kwargs = self.get_import_resource_kwargs(request, form=form, *args, **kwargs)
+            resource = self.get_import_resource_class()(**res_kwargs)
+
+            # prepare additional kwargs for import_data, if needed
+            imp_kwargs = self.get_import_data_kwargs(request, form=form, *args, **kwargs)
+            result = resource.import_data(dataset, dry_run=True,
+                                          raise_errors=False,
+                                          file_name=import_file.name,
+                                          user=request.user,
+                                          **imp_kwargs)
+
+            context['result'] = result
+
+            if not result.has_errors() and not result.has_validation_errors():
+                initial = {
+                    'import_file_name': tmp_storage.name,
+                    'original_file_name': import_file.name,
+                    'input_format': form.cleaned_data['input_format'],
+                }
+                confirm_form = self.get_confirm_import_form()
+                initial = self.get_form_kwargs(form=form, **initial)
+                context['confirm_form'] = confirm_form(initial=initial)
+        else:
+            res_kwargs = self.get_import_resource_kwargs(request, form=form, *args, **kwargs)
+            resource = self.get_import_resource_class()(**res_kwargs)
+
+        context.update(self.admin_site.each_context(request))
+
+        context['title'] = "Import"
+        context['form'] = form
+        context['opts'] = self.model._meta
+        context['fields'] = [f.column_name for f in resource.get_user_visible_fields()]
+        print(context)
+        request.current_app = self.admin_site.name
+        return TemplateResponse(request, [self.import_template_name],
+                                context)
 
     def get_queryset(self, request):
         qs = super(CustomShopAdmin, self).get_queryset(request)
@@ -167,7 +270,7 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
     fields = ['shop', 'category', 'name', 'slug', 'brand', 'model', 'code', 'price', 'attributes', 'available']
     list_display = ['name', 'brand', 'model', 'price', 'available']
     list_editable = ['price', 'available']
-    prepopulated_fields = {'slug': ('name', 'brand', 'code')}
+    prepopulated_fields = {'slug': ('name', 'brand')}
     inlines = [ProductPhotoInline]
     list_filter = [CategoryFilter, 'available', 'brand']
     readonly_fields = ['shop']

@@ -54,7 +54,7 @@ class Product(models.Model):
     slug = models.SlugField(unique=True, verbose_name='Уникальная строка', help_text='Заполняется автоматически')
     brand = models.CharField(max_length=50, verbose_name='Бренд/Производитель')
     model = models.CharField(max_length=50, verbose_name='Модель')
-    code = models.CharField(max_length=16, db_index=True, unique=True, default=None, verbose_name='Код товара',
+    code = models.CharField(max_length=16, db_index=True, unique=False, default=None, verbose_name='Код товара',
                             help_text="Код товара должен быть в числовом виде формата: <em>000000</em>.")
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Цена')
     # text_description = RichTextUploadingField(max_length=10000, blank=True, verbose_name='Описание товара')

@@ -42,5 +42,4 @@ class ProductCategory(MPTTModel):
         except Exception as e:
             print(e)
             ancestors = [self.name]
-        print(ancestors)
         return ancestors[-1]
