@@ -81,3 +81,6 @@ class ProductPhotos(models.Model):
     class Meta:
         verbose_name = 'Фотография'
         verbose_name_plural = 'Фотографии'
+
+    def __str__(self):
+        return f'{self.product.name} {self.product.brand} {self.product.model} {self.product.code} (фото {self.updated})'

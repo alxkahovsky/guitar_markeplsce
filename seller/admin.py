@@ -24,12 +24,21 @@ from django.http import HttpResponse, HttpResponseRedirect
 import tablib
 from transliterate import translit
 from transliterate.utils import LanguageDetectionError
+from django.utils.safestring import mark_safe
 
 
 class ProductPhotoInline(admin.TabularInline):
+    """Метод для отображения фото товара в инлайне"""
+    def show_detail_img(self):
+        print(self.image.url)
+        if self.image:
+            return mark_safe(f'<img src="{self.image.url}" height="250px" width="250px">')
+        else:
+            return 'No image'
+    show_detail_img.short_description = 'Предпросмотр'
     model = ProductPhotos
     extra = 0
-    readonly_fields = ['created', 'updated']
+    readonly_fields = [show_detail_img, 'created', 'updated']
 
 
 class EndCategories(forms.ModelForm):
@@ -80,12 +89,10 @@ class CustomImportForm(ImportForm):
         required=True, widget=SelectMultiple)
 
 
-
 class CustomConfirmImportForm(ConfirmImportForm):
     category = forms.ModelMultipleChoiceField(
         queryset=ProductCategory.objects.filter(children=None),
         required=True, widget=SelectMultiple)
-
 
 
 class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
@@ -100,7 +107,6 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
         return CustomConfirmImportForm
 
     def get_form_kwargs(self, form, *args, **kwargs):
-        # pass on `author` to the kwargs for the custom confirm form
         if isinstance(form, CustomImportForm):
             if form.is_valid():
                 category = form.cleaned_data['category']
@@ -149,14 +155,12 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
         """
         if not self.has_import_permission(request):
             raise PermissionDenied
-
         form_type = self.get_confirm_import_form()
         confirm_form = form_type(request.POST)
         if confirm_form.is_valid():
             import_formats = self.get_import_formats()
             input_format = import_formats[
-                int(confirm_form.cleaned_data['input_format'])
-            ]()
+                int(confirm_form.cleaned_data['input_format'])]()
             tmp_storage = self.get_tmp_storage_class()(name=confirm_form.cleaned_data['import_file_name'])
             data = tmp_storage.read(input_format.get_read_mode())
             if not input_format.is_binary() and self.from_encoding:
@@ -165,7 +169,6 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
             dataset = self._change_dataset(request, input_format.create_dataset(data))
             result = self.process_dataset(dataset, confirm_form, request, *args, **kwargs)
             tmp_storage.remove()
-
             return self.process_result(result, request)
 
     def import_action(self, request, *args, **kwargs):
@@ -177,47 +180,32 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
         """
         if not self.has_import_permission(request):
             raise PermissionDenied
-
         context = self.get_import_context_data()
-
         import_formats = self.get_import_formats()
         form_type = self.get_import_form()
         form_kwargs = self.get_form_kwargs(form_type, *args, **kwargs)
-        print('1')
         form = form_type(import_formats,
                          request.POST or None,
                          request.FILES or None,
                          **form_kwargs)
-
         if request.POST and form.is_valid():
-            print(form.cleaned_data)
             input_format = import_formats[
-                int(form.cleaned_data['input_format'])
-            ]()
+                int(form.cleaned_data['input_format'])]()
             import_file = form.cleaned_data['import_file']
-            # first always write the uploaded file to disk as it may be a
-            # memory file or else based on settings upload handlers
             tmp_storage = self.write_to_tmp_storage(import_file, input_format)
-
-            # then read the file, using the proper format-specific mode
-            # warning, big files may exceed memory
             try:
                 data = tmp_storage.read(input_format.get_read_mode())
                 if not input_format.is_binary() and self.from_encoding:
                     data = force_str(data, self.from_encoding)
                 #  используем кастомный метод change_dataset в котором вносим нужные нам изменения
                 dataset = self._change_dataset(request, input_format.create_dataset(data))
-
             except UnicodeDecodeError as e:
                 return HttpResponse(_(u"<h1>Imported file has a wrong encoding: %s</h1>" % e))
             except Exception as e:
-                return HttpResponse(_(u"<h1>%s encountered while trying to read file: %s</h1>" % (
-                type(e).__name__, import_file.name)))
-
-            # prepare kwargs for import data, if needed
+                return HttpResponse(_(u"<h1>%s encountered while trying to read file: %s</h1>" %
+                                      (type(e).__name__, import_file.name)))
             res_kwargs = self.get_import_resource_kwargs(request, form=form, *args, **kwargs)
             resource = self.get_import_resource_class()(**res_kwargs)
-
             # prepare additional kwargs for import_data, if needed
             imp_kwargs = self.get_import_data_kwargs(request, form=form, *args, **kwargs)
             result = resource.import_data(dataset, dry_run=True,
@@ -225,9 +213,7 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
                                           file_name=import_file.name,
                                           user=request.user,
                                           **imp_kwargs)
-
             context['result'] = result
-
             if not result.has_errors() and not result.has_validation_errors():
                 initial = {
                     'import_file_name': tmp_storage.name,
@@ -240,14 +226,11 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
         else:
             res_kwargs = self.get_import_resource_kwargs(request, form=form, *args, **kwargs)
             resource = self.get_import_resource_class()(**res_kwargs)
-
         context.update(self.admin_site.each_context(request))
-
         context['title'] = "Import"
         context['form'] = form
         context['opts'] = self.model._meta
         context['fields'] = [f.column_name for f in resource.get_user_visible_fields()]
-        print(context)
         request.current_app = self.admin_site.name
         return TemplateResponse(request, [self.import_template_name],
                                 context)
@@ -267,8 +250,25 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
         form.save_m2m()
         return instance
 
+    def show_main_img(self):
+        """Показываем миниатюру изображения для товара"""
+        main_img = None
+        product_images = ProductPhotos.objects.filter(product=self.id)
+        if len(product_images) != 0:
+            for i in product_images:
+                if i.is_main:
+                    main_img = i
+            if main_img is None:
+                main_img = product_images[0]
+        if main_img is not None:
+            return mark_safe(f'<img src="{main_img.image.url}" alt="{self.name}" height="100px" width="100px">')
+        else:
+            return 'No image'
+
+    show_main_img.short_description = 'Фото'
+
     fields = ['shop', 'category', 'name', 'slug', 'brand', 'model', 'code', 'price', 'attributes', 'available']
-    list_display = ['name', 'brand', 'model', 'price', 'available']
+    list_display = ['name', 'brand', 'model', 'price', 'available', show_main_img]
     list_editable = ['price', 'available']
     prepopulated_fields = {'slug': ('name', 'brand')}
     inlines = [ProductPhotoInline]
@@ -302,4 +302,3 @@ class SellerAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Product, CustomShopAdmin)
-
