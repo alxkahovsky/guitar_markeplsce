@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Изменить атрибуты товара</title>
+    <script type="text/javascript">
+        function deleteField(a) {
+         var contDiv = a.parentNode;
+         contDiv.parentNode.removeChild(contDiv);
+         return false;
+        }
+        var getAlphaNumericRandom = function(len) {
+          if ((len==undefined) || (len<=0)) {len=1;}
+          var characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          var result = '';
+          var iffirst = 0;
+          for(var i=0;i<len;i++){
+            if (i==0) {iffirst = 10;} else {iffirst = 0;}
+            result += characters[Math.round(Math.random()*(characters.length-iffirst-1))];
+          }
+          return result;
+        }
+        function addField(v) {
+         var div = document.createElement("div");
+         var attr_name = 'attr_name_'.concat(v)
+         var attr_value = 'attr_value_'.concat(v)
+         div.innerHTML += '<input name='+attr_name+' type="text"/> <input name='+attr_value+' type="text"/> <a onclick="return deleteField(this)" href="#">Удалить поле</a>';
+         document.getElementById("parentId").appendChild(div);
+         return false;
+        }
+    </script>
+</head>
+<body>
+Edit json attributes
+<a href="/admin/seller/product/{{ product.id }}/change/">{{ product.name }} {{ product.brand }} {{ product.model }}</a>
+
+<form method="POST" action="">{% csrf_token %}
+ <div id="parentId">
+     {% for k,v in product.attributes.items %}
+ <div>
+ <input name="attr_name_{{ k }}" type="text" value="{{ k }}" /> <input name="attr_val_{{ v }}" type="text" value="{{ v }}"/>
+ <a onclick="return deleteField(this)" href="#">[X]</a>
+ </div>
+     {% endfor %}
+ </div>
+ <input class="s" type="submit" value="Обновить данные" />
+</form>
+<br>
+<a onclick="return addField(getAlphaNumericRandom(6))" href="#">Добавить поле</a>
+
+</body>
+</html>

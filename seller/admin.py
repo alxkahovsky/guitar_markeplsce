@@ -25,6 +25,7 @@ import tablib
 from transliterate import translit
 from transliterate.utils import LanguageDetectionError
 from django.utils.safestring import mark_safe
+from django.urls import reverse
 
 
 class ProductPhotoInline(admin.TabularInline):
@@ -73,7 +74,6 @@ class ProductResource(resources.ModelResource):
     category = fields.Field(column_name='category',
                             attribute='category',
                             widget=ForeignKeyWidget(ProductCategory, field='name'))
-    # shop = fields.Field(column_name='Магазин', attribute='shop', widget=ForeignKeyWidget(Seller, field='name'))
 
     class Meta:
         model = Product
@@ -206,7 +206,7 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
                                       (type(e).__name__, import_file.name)))
             res_kwargs = self.get_import_resource_kwargs(request, form=form, *args, **kwargs)
             resource = self.get_import_resource_class()(**res_kwargs)
-            # prepare additional kwargs for import_data, if needed
+            # подготовка kwargs для import_data, если необходимо
             imp_kwargs = self.get_import_data_kwargs(request, form=form, *args, **kwargs)
             result = resource.import_data(dataset, dry_run=True,
                                           raise_errors=False,
@@ -267,8 +267,11 @@ class CustomShopAdmin(ImportMixin, admin.ModelAdmin):
 
     show_main_img.short_description = 'Фото'
 
+    def add_json_attrs(self):
+        return mark_safe(f'<a href="{reverse("seller:add_json_attrs", args=[self.id])}">Добавить атрибуты</a>')
+
     fields = ['shop', 'category', 'name', 'slug', 'brand', 'model', 'code', 'price', 'attributes', 'available']
-    list_display = ['name', 'brand', 'model', 'price', 'available', show_main_img]
+    list_display = ['name', 'brand', 'model', 'price', 'available', show_main_img, add_json_attrs]
     list_editable = ['price', 'available']
     prepopulated_fields = {'slug': ('name', 'brand')}
     inlines = [ProductPhotoInline]

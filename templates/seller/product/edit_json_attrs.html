@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Изменить атрибуты товара</title>
+</head>
+<body>
+Edit json attributes {{ product.name }} {{ product.brand }} {{ product.model }}
+
+<form action="" method="post">{% csrf_token %}
+    {% for k in keys %}
+    <label for="{{ k }}">{{ k }}:</label>
+    <input id="{{ k }}" type="text" name="{{ k }}">
+        <br>
+    {% endfor %}
+{#    <a onclick="return addField()" href="#">Добавить поле</a>#}
+    <input type="submit" value="Изменить">
+</form>
+
+
+</body>
+</html>

@@ -43,3 +43,17 @@ class ProductCategory(MPTTModel):
             print(e)
             ancestors = [self.name]
         return ancestors[-1]
+
+
+class DefaultJSONData(models.Model):
+    category = models.ForeignKey(ProductCategory, null=True, blank=True,
+                                 on_delete=models.CASCADE, verbose_name='Категория')
+    default_attributes = models.JSONField(blank=True, null=True, verbose_name='Атрибуты',
+                                          help_text='задайте JSON-структуру по умолчанию (для данной категории)')
+
+    class Meta:
+        verbose_name = 'Атрибуты по умолчанию'
+        verbose_name_plural = 'Атрибуты по умолчанию'
+
+    def __str__(self):
+        return f'JSON для товаров категории {self.category.name}'
